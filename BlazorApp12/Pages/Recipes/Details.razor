@@ -1,0 +1,137 @@
+﻿@page "/recipes/details/{id:int}"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<h3>Деталі рецепту</h3>
+
+@if (recipe == null)
+{
+    <p>Завантаження рецепту...</p>
+}
+else
+{
+    <div class="card">
+        <div class="card-header">
+            <h4>@recipe.Title</h4>
+        </div>
+        <div class="card-body">
+            <h5>Опис</h5>
+            <p>@recipe.Description</p>
+
+            <h5>Інструкції</h5>
+            <p>@recipe.Instructions</p>
+
+            <h5>Час приготування</h5>
+            <p>@recipe.CookingTime хвилин</p>
+
+            <h5>Рівень складності</h5>
+            <p>@(recipe.DifficultyLevel?.Name ?? "Немає")</p>
+
+            <h5>Калорії</h5>
+            <p>@recipe.Calories ккал</p>
+
+            <h5>Інгредієнти</h5>
+            @if (recipe.RecipeIngredients != null && recipe.RecipeIngredients.Any())
+            {
+                <ul>
+                    @foreach (var ingredient in recipe.RecipeIngredients)
+                    {
+                        <li>@(ingredient.Ingredient?.Name ?? "Невідомий інгредієнт") (@ingredient.Quantity)</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p>Немає інгредієнтів</p>
+            }
+
+            <h5>Категорії</h5>
+            @if (recipe.RecipeCategories != null && recipe.RecipeCategories.Any())
+            {
+                <ul>
+                    @foreach (var category in recipe.RecipeCategories)
+                    {
+                        <li>@(category.Category?.Name ?? "Невідома категорія")</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p>Немає категорій</p>
+            }
+
+            <h5>Час прийому їжі</h5>
+            @if (recipe.RecipeMealTimes != null && recipe.RecipeMealTimes.Any())
+            {
+                <ul>
+                    @foreach (var mealTime in recipe.RecipeMealTimes)
+                    {
+                        <li>@(mealTime.MealTime?.Name ?? "Невідомий час")</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p>Немає часу прийому їжі</p>
+            }
+        </div>
+        <div class="card-footer">
+            <a href="/recipes" class="btn btn-secondary">Назад до списку</a>
+            <a href="/recipes/edit/@recipe.Id" class="btn btn-primary">Редагувати</a>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p class="text-danger">@errorMessage</p>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Recipe recipe;
+    private string errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var response = await Http.GetAsync($"https://localhost:7162/api/Recipe/{Id}");
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження рецепту: {response.ReasonPhrase}";
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Recipe JSON: {json}");
+            recipe = JsonSerializer.Deserialize<Recipe>(json, options);
+
+            if (recipe == null)
+            {
+                errorMessage = "Рецепт не знайдено.";
+            }
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Помилка десеріалізації: {ex.Message}";
+            Console.WriteLine($"JsonException: {ex.StackTrace}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження даних: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+}

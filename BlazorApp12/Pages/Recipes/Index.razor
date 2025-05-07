@@ -1,0 +1,168 @@
+﻿@page "/recipes"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding-top: 10%;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+    }
+
+        .modal-content h4 {
+            margin-top: 0;
+        }
+
+        .modal-content .btn {
+            margin: 5px;
+        }
+</style>
+
+<h3>Рецепти</h3>
+
+@if (recipes == null)
+{
+    <p>Завантаження рецептів...</p>
+}
+else if (!recipes.Any())
+{
+    <p>Рецептів не знайдено.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Назва</th>
+                <th>Опис</th>
+                <th>Дії</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var recipe in recipes)
+            {
+                <tr>
+                    <td>@recipe.Title</td>
+                    <td>@recipe.Description</td>
+                    <td>
+                        <a href="/recipes/details/@recipe.Id" class="btn btn-info btn-sm">Деталі</a>
+                        <a href="/recipes/edit/@recipe.Id" class="btn btn-primary btn-sm">Редагувати</a>
+                        <button class="btn btn-danger btn-sm" @onclick="() => ShowDeleteConfirmation(recipe.Id)">Видалити</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<a href="/recipes/create" class="btn btn-success">Додати рецепт</a>
+
+@if (showDeleteConfirmation)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <h4>Підтвердження видалення</h4>
+            <p>Ви впевнені, що хочете видалити рецепт?</p>
+            <button class="btn btn-danger" @onclick="ConfirmDelete">Видалити</button>
+            <button class="btn btn-secondary" @onclick="CancelDelete">Скасувати</button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p class="text-danger">@errorMessage</p>
+}
+
+@code {
+    private List<Recipe> recipes;
+    private string errorMessage;
+    private bool showDeleteConfirmation;
+    private int recipeIdToDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var response = await Http.GetAsync("https://localhost:7162/api/Recipe");
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження рецептів: {response.ReasonPhrase}";
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Recipe JSON: {json}");
+            recipes = JsonSerializer.Deserialize<List<Recipe>>(json, options) ?? new List<Recipe>();
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Помилка десеріалізації: {ex.Message}";
+            Console.WriteLine($"JsonException: {ex.StackTrace}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження даних: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+
+    private void ShowDeleteConfirmation(int id)
+    {
+        recipeIdToDelete = id;
+        showDeleteConfirmation = true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"https://localhost:7162/api/Recipe/{recipeIdToDelete}");
+            if (response.IsSuccessStatusCode)
+            {
+                recipes.RemoveAll(r => r.Id == recipeIdToDelete);
+                showDeleteConfirmation = false;
+            }
+            else
+            {
+                errorMessage = $"Помилка видалення рецепту: {response.ReasonPhrase}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка: {ex.Message}";
+        }
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirmation = false;
+    }
+}

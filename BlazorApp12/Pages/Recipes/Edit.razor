@@ -1,0 +1,305 @@
+﻿@page "/recipes/edit/{id:int}"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<h3>Редагувати рецепт</h3>
+
+@if (recipe == null || difficultyLevels == null || ingredients == null || categories == null || mealTimes == null)
+{
+    <p>Завантаження рецепту...</p>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="text-danger">@errorMessage</p>
+    }
+}
+else
+{
+    <EditForm Model="@recipe" OnValidSubmit="@HandleEditRecipe">
+        <DataAnnotationsValidator />
+
+        <div class="form-group">
+            <label for="title">Назва</label>
+            <InputText id="title" class="form-control" @bind-Value="recipe.Title" />
+            <ValidationMessage For="() => recipe.Title" />
+        </div>
+
+        <div class="form-group">
+            <label for="description">Опис</label>
+            <InputTextArea id="description" class="form-control" @bind-Value="recipe.Description" />
+            <ValidationMessage For="() => recipe.Description" />
+        </div>
+
+        <div class="form-group">
+            <label for="instructions">Інструкції</label>
+            <InputTextArea id="instructions" class="form-control" @bind-Value="recipe.Instructions" />
+            <ValidationMessage For="() => recipe.Instructions" />
+        </div>
+
+        <div class="form-group">
+            <label for="cookingTime">Час приготування (хвилини)</label>
+            <InputNumber id="cookingTime" class="form-control" @bind-Value="recipe.CookingTime" />
+            <ValidationMessage For="() => recipe.CookingTime" />
+        </div>
+
+        <div class="form-group">
+            <label for="difficultyLevelId">Рівень складності</label>
+            <InputSelect id="difficultyLevelId" class="form-control" @bind-Value="recipe.DifficultyLevelId">
+                <option value="0">Виберіть рівень складності...</option>
+                @foreach (var level in difficultyLevels)
+                {
+                    <option value="@level.Id">@level.Name</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="() => recipe.DifficultyLevelId" />
+        </div>
+
+        <div class="form-group">
+            <label for="calories">Калорії</label>
+            <InputNumber id="calories" class="form-control" @bind-Value="recipe.Calories" />
+            <ValidationMessage For="() => recipe.Calories" />
+        </div>
+
+        <div class="form-group">
+            <label>Інгредієнти</label>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Інгредієнт</th>
+                        <th>Кількість</th>
+                        <th>Дія</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ingredient in recipe.RecipeIngredients)
+                    {
+                        <tr>
+                            <td>
+                                <InputSelect @bind-Value="ingredient.IngredientId" class="form-control">
+                                    <option value="0">Виберіть інгредієнт...</option>
+                                    @foreach (var ing in ingredients)
+                                    {
+                                        <option value="@ing.Id">@ing.Name</option>
+                                    }
+                                </InputSelect>
+                            </td>
+                            <td>
+                                <InputText @bind-Value="ingredient.Quantity" class="form-control" placeholder="напр., 200г" />
+                                <ValidationMessage For="() => ingredient.Quantity" />
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-danger btn-sm" @onclick="@(() => RemoveIngredient(ingredient))">Видалити</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-secondary" @onclick="AddIngredient">Додати інгредієнт</button>
+            @if (showIngredientError)
+            {
+                <p class="text-danger">Потрібен принаймні один інгредієнт з валідним ID та кількістю.</p>
+            }
+        </div>
+
+        <div class="form-group">
+            <label for="categories">Категорії</label>
+            <InputSelect id="categories" class="form-control" multiple @bind-Value="selectedCategoryIds">
+                @foreach (var category in categories)
+                {
+                    <option value="@category.Id">@category.Name</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="form-group">
+            <label for="mealTimes">Час прийому їжі</label>
+            <InputSelect id="mealTimes" class="form-control" multiple @bind-Value="selectedMealTimeIds">
+                @foreach (var mealTime in mealTimes)
+                {
+                    <option value="@mealTime.Id">@mealTime.Name</option>
+                }
+            </InputSelect>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Зберегти зміни</button>
+        <button class="btn btn-secondary" @onclick="Cancel">Скасувати</button>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <p class="text-danger">@errorMessage</p>
+        }
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Recipe recipe;
+    private List<DifficultyLevel> difficultyLevels = new List<DifficultyLevel>();
+    private List<Ingredient> ingredients = new List<Ingredient>();
+    private List<Category> categories = new List<Category>();
+    private List<MealTime> mealTimes = new List<MealTime>();
+    private int[] selectedCategoryIds = Array.Empty<int>();
+    private int[] selectedMealTimeIds = Array.Empty<int>();
+    private string errorMessage;
+    private bool showIngredientError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var difficultyLevelResponse = await Http.GetAsync("https://localhost:7162/api/DifficultyLevel");
+            if (!difficultyLevelResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження рівнів складності: {difficultyLevelResponse.ReasonPhrase}";
+                return;
+            }
+            var difficultyLevelJson = await difficultyLevelResponse.Content.ReadAsStringAsync();
+            Console.WriteLine($"DifficultyLevel JSON: {difficultyLevelJson}");
+            difficultyLevels = JsonSerializer.Deserialize<List<DifficultyLevel>>(difficultyLevelJson, options) ?? new List<DifficultyLevel>();
+
+            var ingredientResponse = await Http.GetAsync("https://localhost:7162/api/Ingredient");
+            if (!ingredientResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження інгредієнтів: {ingredientResponse.ReasonPhrase}";
+                return;
+            }
+            var ingredientJson = await ingredientResponse.Content.ReadAsStringAsync();
+            Console.WriteLine($"Ingredient JSON: {ingredientJson}");
+            ingredients = JsonSerializer.Deserialize<List<Ingredient>>(ingredientJson, options) ?? new List<Ingredient>();
+
+            var categoryResponse = await Http.GetAsync("https://localhost:7162/api/Category");
+            if (!categoryResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження категорій: {categoryResponse.ReasonPhrase}";
+                return;
+            }
+            var categoryJson = await categoryResponse.Content.ReadAsStringAsync();
+            Console.WriteLine($"Category JSON: {categoryJson}");
+            categories = JsonSerializer.Deserialize<List<Category>>(categoryJson, options) ?? new List<Category>();
+
+            var mealTimeResponse = await Http.GetAsync("https://localhost:7162/api/MealTime");
+            if (!mealTimeResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження часу прийому їжі: {mealTimeResponse.ReasonPhrase}";
+                return;
+            }
+            var mealTimeJson = await mealTimeResponse.Content.ReadAsStringAsync();
+            Console.WriteLine($"MealTime JSON: {mealTimeJson}");
+            mealTimes = JsonSerializer.Deserialize<List<MealTime>>(mealTimeJson, options) ?? new List<MealTime>();
+
+            var recipeResponse = await Http.GetAsync($"https://localhost:7162/api/Recipe/{Id}");
+            if (!recipeResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження рецепту: {recipeResponse.ReasonPhrase}";
+                return;
+            }
+            var recipeJson = await recipeResponse.Content.ReadAsStringAsync();
+            Console.WriteLine($"Recipe JSON: {recipeJson}");
+            recipe = JsonSerializer.Deserialize<Recipe>(recipeJson, options);
+            if (recipe == null)
+            {
+                errorMessage = "Рецепт не знайдено.";
+                return;
+            }
+
+            selectedCategoryIds = recipe.RecipeCategories.Select(rc => rc.CategoryId).ToArray();
+            selectedMealTimeIds = recipe.RecipeMealTimes.Select(rm => rm.MealTimeId).ToArray();
+
+            if (!difficultyLevels.Any() || !ingredients.Any() || !categories.Any() || !mealTimes.Any())
+            {
+                errorMessage = "Деякі дані не вдалося завантажити з сервера.";
+            }
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Помилка десеріалізації: {ex.Message}";
+            Console.WriteLine($"JsonException: {ex.StackTrace}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження даних: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+
+    private void AddIngredient()
+    {
+        recipe.RecipeIngredients.Add(new RecipeIngredient());
+    }
+
+    private void RemoveIngredient(RecipeIngredient ingredient)
+    {
+        recipe.RecipeIngredients.Remove(ingredient);
+    }
+
+    private async Task HandleEditRecipe()
+    {
+        try
+        {
+            showIngredientError = false;
+
+            if (!recipe.RecipeIngredients.Any() || recipe.RecipeIngredients.Any(ri => ri.IngredientId <= 0 || string.IsNullOrWhiteSpace(ri.Quantity)))
+            {
+                showIngredientError = true;
+                errorMessage = "Потрібен принаймні один інгредієнт з валідним ID та кількістю.";
+                return;
+            }
+
+            if (!recipe.DifficultyLevelId.HasValue || recipe.DifficultyLevelId <= 0)
+            {
+                errorMessage = "Виберіть валідний рівень складності.";
+                return;
+            }
+
+            recipe.RecipeCategories = selectedCategoryIds
+                .Select(id => new RecipeCategory { CategoryId = id, RecipeId = Id, Recipe = null, Category = null })
+                .ToList();
+
+            recipe.RecipeMealTimes = selectedMealTimeIds
+                .Select(id => new RecipeMealTime { MealTimeId = id, RecipeId = Id, Recipe = null, MealTime = null })
+                .ToList();
+
+            foreach (var ri in recipe.RecipeIngredients)
+            {
+                ri.RecipeId = Id;
+                ri.Recipe = null;
+                ri.Ingredient = null;
+            }
+
+            recipe.DifficultyLevel = null;
+
+            var jsonOptions = new JsonSerializerOptions { ReferenceHandler = ReferenceHandler.Preserve };
+            Console.WriteLine($"Recipe to PUT: {JsonSerializer.Serialize(recipe, jsonOptions)}");
+
+            var response = await Http.PutAsJsonAsync($"https://localhost:7162/api/Recipe/{Id}", recipe);
+            if (response.IsSuccessStatusCode)
+            {
+                Navigation.NavigateTo("/recipes");
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Помилка оновлення рецепту: {response.ReasonPhrase}. Деталі: {errorContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/recipes");
+    }
+}

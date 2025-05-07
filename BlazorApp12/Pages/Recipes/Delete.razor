@@ -1,0 +1,73 @@
+﻿@page "/recipes/delete/{id:int}"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+@if (recipe == null)
+{
+    <p>Loading recipe...</p>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="text-danger">@errorMessage</p>
+    }
+}
+else
+{
+    <h3>Delete Recipe</h3>
+    <p>Are you sure you want to delete "@recipe.Title"?</p>
+    <button class="btn btn-danger" @onclick="ConfirmDelete">Delete</button>
+    <button class="btn btn-secondary" @onclick="Cancel">Cancel</button>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="text-danger">@errorMessage</p>
+    }
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Recipe recipe;
+    private string errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            recipe = await Http.GetFromJsonAsync<Recipe>($"https://localhost:7162/api/Recipe/{Id}");
+            if (recipe == null)
+            {
+                errorMessage = "Recipe not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading recipe: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"https://localhost:7162/api/Recipe/{Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                Navigation.NavigateTo("/recipes");
+            }
+            else
+            {
+                errorMessage = $"Error deleting recipe: {response.ReasonPhrase}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/recipes");
+    }
+}
