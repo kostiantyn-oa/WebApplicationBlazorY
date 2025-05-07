@@ -15,7 +15,6 @@ namespace BlazorApp12.Models
         public string Description { get; set; }
 
         [Required(ErrorMessage = "Інструкції є обов'язковими.")]
-        [StringLength(2000, MinimumLength = 10, ErrorMessage = "Інструкції повинні містити від 10 до 2000 символів.")]
         public string Instructions { get; set; }
 
         [Required(ErrorMessage = "Час приготування є обов'язковим.")]
@@ -32,6 +31,8 @@ namespace BlazorApp12.Models
         public int Calories { get; set; }
 
         public DateTime CreatedDate { get; set; }
+
+        public byte[]? Photo { get; set; }
 
         public List<RecipeIngredient> RecipeIngredients { get; set; } = new List<RecipeIngredient>();
         public List<RecipeCategory> RecipeCategories { get; set; } = new List<RecipeCategory>();

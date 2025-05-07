@@ -38,13 +38,12 @@ namespace WebApplicationW.Services.Repositories
 
         public async Task<Recipe> AddAsync(Recipe recipe)
         {
-            // Очищення навігаційних властивостей для уникнення помилок валідації
             recipe.DifficultyLevel = null;
             if (recipe.RecipeIngredients != null)
             {
                 foreach (var ri in recipe.RecipeIngredients)
                 {
-                    ri.RecipeId = 0; // Буде встановлено після збереження
+                    ri.RecipeId = 0;
                     ri.Recipe = null;
                     ri.Ingredient = null;
                 }
@@ -53,7 +52,7 @@ namespace WebApplicationW.Services.Repositories
             {
                 foreach (var rc in recipe.RecipeCategories)
                 {
-                    rc.RecipeId = 0; // Буде встановлено після збереження
+                    rc.RecipeId = 0;
                     rc.Recipe = null;
                     rc.Category = null;
                 }
@@ -62,7 +61,7 @@ namespace WebApplicationW.Services.Repositories
             {
                 foreach (var rm in recipe.RecipeMealTimes)
                 {
-                    rm.RecipeId = 0; // Буде встановлено після збереження
+                    rm.RecipeId = 0;
                     rm.Recipe = null;
                     rm.MealTime = null;
                 }
@@ -87,7 +86,6 @@ namespace WebApplicationW.Services.Repositories
                 throw new KeyNotFoundException($"Recipe with ID {id} not found.");
             }
 
-            // Очищення навігаційних властивостей
             recipe.DifficultyLevel = null;
             if (recipe.RecipeIngredients != null)
             {
@@ -117,10 +115,8 @@ namespace WebApplicationW.Services.Repositories
                 }
             }
 
-            // Оновлення основних властивостей
             _context.Entry(existingRecipe).CurrentValues.SetValues(recipe);
 
-            // Оновлення інгредієнтів
             _context.RecipeIngredient.RemoveRange(existingRecipe.RecipeIngredients);
             if (recipe.RecipeIngredients != null)
             {
@@ -135,7 +131,6 @@ namespace WebApplicationW.Services.Repositories
                 }
             }
 
-            // Оновлення категорій
             _context.RecipeCategory.RemoveRange(existingRecipe.RecipeCategories);
             if (recipe.RecipeCategories != null)
             {
@@ -149,7 +144,6 @@ namespace WebApplicationW.Services.Repositories
                 }
             }
 
-            // Оновлення часу прийому їжі
             _context.RecipeMealTime.RemoveRange(existingRecipe.RecipeMealTimes);
             if (recipe.RecipeMealTimes != null)
             {

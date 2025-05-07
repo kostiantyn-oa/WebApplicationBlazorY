@@ -70,6 +70,8 @@ namespace WebApplicationW.Services
                 .WithMany()
                 .HasForeignKey(r => r.DifficultyLevelId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Немає потреби в додатковій конфігурації для Photo, оскільки byte[] мапиться на VARBINARY(MAX)
         }
     }
 }

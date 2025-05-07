@@ -1,7 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using WebApplicationW.Dtos;
 using WebApplicationW.Models;
 using WebApplicationW.Services.Repositories;
+using Ganss.Xss;
 
 namespace WebApplicationW.Controllers
 {
@@ -10,10 +15,25 @@ namespace WebApplicationW.Controllers
     public class RecipeController : ControllerBase
     {
         private readonly IRecipeRepository _recipeRepository;
+        private readonly IHtmlSanitizer _sanitizer;
 
         public RecipeController(IRecipeRepository recipeRepository)
         {
             _recipeRepository = recipeRepository;
+            _sanitizer = new HtmlSanitizer();
+            _sanitizer.AllowedTags.Add("iframe");
+            _sanitizer.AllowedTags.Add("video");
+            _sanitizer.AllowedTags.Add("audio");
+            _sanitizer.AllowedTags.Add("source");
+            _sanitizer.AllowedTags.Add("figure");
+            _sanitizer.AllowedTags.Add("figcaption");
+            _sanitizer.AllowedAttributes.Add("class");
+            _sanitizer.AllowedAttributes.Add("style");
+            _sanitizer.AllowedAttributes.Add("src");
+            _sanitizer.AllowedAttributes.Add("controls");
+            _sanitizer.AllowedAttributes.Add("poster");
+            _sanitizer.AllowedAttributes.Add("alt");
+            _sanitizer.AllowedAttributes.Add("title");
         }
 
         [HttpGet]
@@ -35,12 +55,37 @@ namespace WebApplicationW.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Recipe>> PostRecipe(Recipe recipe)
+        public async Task<ActionResult<Recipe>> PostRecipe([FromBody] RecipeDto recipeDto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(new { Message = "Невалідна модель.", Errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
             }
+
+            var recipe = new Recipe
+            {
+                Title = recipeDto.Title,
+                Description = recipeDto.Description,
+                Instructions = _sanitizer.Sanitize(recipeDto.Instructions),
+                CookingTime = recipeDto.CookingTime,
+                DifficultyLevelId = recipeDto.DifficultyLevelId,
+                Calories = recipeDto.Calories,
+                CreatedDate = recipeDto.CreatedDate,
+                Photo = recipeDto.Photo != null ? Convert.FromBase64String(recipeDto.Photo) : null,
+                RecipeIngredients = recipeDto.RecipeIngredients.Select(ri => new RecipeIngredient
+                {
+                    IngredientId = ri.IngredientId,
+                    Quantity = ri.Quantity
+                }).ToList(),
+                RecipeCategories = recipeDto.RecipeCategories.Select(rc => new RecipeCategory
+                {
+                    CategoryId = rc.CategoryId
+                }).ToList(),
+                RecipeMealTimes = recipeDto.RecipeMealTimes.Select(rm => new RecipeMealTime
+                {
+                    MealTimeId = rm.MealTimeId
+                }).ToList()
+            };
 
             if (string.IsNullOrWhiteSpace(recipe.Title))
             {
@@ -62,7 +107,6 @@ namespace WebApplicationW.Controllers
                 return BadRequest(new { Message = $"Невалідний DifficultyLevelId: {recipe.DifficultyLevelId ?? 0}." });
             }
 
-            // Валідація інгредієнтів
             if (recipe.RecipeIngredients == null || !recipe.RecipeIngredients.Any())
             {
                 return BadRequest(new { Message = "Потрібен принаймні один інгредієнт." });
@@ -80,27 +124,19 @@ namespace WebApplicationW.Controllers
                 }
             }
 
-            // Валідація категорій
-            if (recipe.RecipeCategories != null)
+            foreach (var rc in recipe.RecipeCategories)
             {
-                foreach (var rc in recipe.RecipeCategories)
+                if (rc.CategoryId <= 0)
                 {
-                    if (rc.CategoryId <= 0)
-                    {
-                        return BadRequest(new { Message = "Категорія повинна мати валідний ID." });
-                    }
+                    return BadRequest(new { Message = "Категорія повинна мати валідний ID." });
                 }
             }
 
-            // Валідація часу прийому їжі
-            if (recipe.RecipeMealTimes != null)
+            foreach (var rm in recipe.RecipeMealTimes)
             {
-                foreach (var rm in recipe.RecipeMealTimes)
+                if (rm.MealTimeId <= 0)
                 {
-                    if (rm.MealTimeId <= 0)
-                    {
-                        return BadRequest(new { Message = "Час прийому їжі повинен мати валідний ID." });
-                    }
+                    return BadRequest(new { Message = "Час прийому їжі повинен мати валідний ID." });
                 }
             }
 
@@ -109,9 +145,9 @@ namespace WebApplicationW.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutRecipe(int id, Recipe recipe)
+        public async Task<IActionResult> PutRecipe(int id, [FromBody] RecipeDto recipeDto)
         {
-            if (id != recipe.Id)
+            if (id != recipeDto.Id)
             {
                 return BadRequest(new { Message = "ID рецепту не співпадає." });
             }
@@ -121,6 +157,32 @@ namespace WebApplicationW.Controllers
                 return BadRequest(new { Message = "Невалідна модель.", Errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
             }
 
+            var recipe = new Recipe
+            {
+                Id = id,
+                Title = recipeDto.Title,
+                Description = recipeDto.Description,
+                Instructions = _sanitizer.Sanitize(recipeDto.Instructions),
+                CookingTime = recipeDto.CookingTime,
+                DifficultyLevelId = recipeDto.DifficultyLevelId,
+                Calories = recipeDto.Calories,
+                CreatedDate = recipeDto.CreatedDate,
+                Photo = recipeDto.Photo != null ? Convert.FromBase64String(recipeDto.Photo) : null,
+                RecipeIngredients = recipeDto.RecipeIngredients.Select(ri => new RecipeIngredient
+                {
+                    IngredientId = ri.IngredientId,
+                    Quantity = ri.Quantity
+                }).ToList(),
+                RecipeCategories = recipeDto.RecipeCategories.Select(rc => new RecipeCategory
+                {
+                    CategoryId = rc.CategoryId
+                }).ToList(),
+                RecipeMealTimes = recipeDto.RecipeMealTimes.Select(rm => new RecipeMealTime
+                {
+                    MealTimeId = rm.MealTimeId
+                }).ToList()
+            };
+
             if (string.IsNullOrWhiteSpace(recipe.Title))
             {
                 return BadRequest(new { Message = "Назва рецепту є обов'язковою." });
@@ -141,7 +203,6 @@ namespace WebApplicationW.Controllers
                 return BadRequest(new { Message = $"Невалідний DifficultyLevelId: {recipe.DifficultyLevelId ?? 0}." });
             }
 
-            // Валідація інгредієнтів
             if (recipe.RecipeIngredients == null || !recipe.RecipeIngredients.Any())
             {
                 return BadRequest(new { Message = "Потрібен принаймні один інгредієнт." });
@@ -159,27 +220,19 @@ namespace WebApplicationW.Controllers
                 }
             }
 
-            // Валідація категорій
-            if (recipe.RecipeCategories != null)
+            foreach (var rc in recipe.RecipeCategories)
             {
-                foreach (var rc in recipe.RecipeCategories)
+                if (rc.CategoryId <= 0)
                 {
-                    if (rc.CategoryId <= 0)
-                    {
-                        return BadRequest(new { Message = "Категорія повинна мати валідний ID." });
-                    }
+                    return BadRequest(new { Message = "Категорія повинна мати валідний ID." });
                 }
             }
 
-            // Валідація часу прийому їжі
-            if (recipe.RecipeMealTimes != null)
+            foreach (var rm in recipe.RecipeMealTimes)
             {
-                foreach (var rm in recipe.RecipeMealTimes)
+                if (rm.MealTimeId <= 0)
                 {
-                    if (rm.MealTimeId <= 0)
-                    {
-                        return BadRequest(new { Message = "Час прийому їжі повинен мати валідний ID." });
-                    }
+                    return BadRequest(new { Message = "Час прийому їжі повинен мати валідний ID." });
                 }
             }
 

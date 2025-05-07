@@ -15,7 +15,6 @@ namespace WebApplicationW.Models
         public string Description { get; set; }
 
         [Required(ErrorMessage = "Інструкції є обов'язковими.")]
-        [StringLength(2000, MinimumLength = 10, ErrorMessage = "Інструкції повинні містити від 10 до 2000 символів.")]
         public string Instructions { get; set; }
 
         [Required(ErrorMessage = "Час приготування є обов'язковим.")]
@@ -26,12 +25,14 @@ namespace WebApplicationW.Models
         [Range(1, int.MaxValue, ErrorMessage = "Виберіть валідний рівень складності.")]
         public int? DifficultyLevelId { get; set; }
 
-        public DifficultyLevel? DifficultyLevel { get; set; } // Явно необов'язкове
+        public DifficultyLevel? DifficultyLevel { get; set; }
 
         [Range(0, 10000, ErrorMessage = "Калорії мають бути від 0 до 10000.")]
         public int Calories { get; set; }
 
         public DateTime CreatedDate { get; set; }
+
+        public byte[]? Photo { get; set; }
 
         public List<RecipeIngredient> RecipeIngredients { get; set; } = new List<RecipeIngredient>();
         public List<RecipeCategory> RecipeCategories { get; set; } = new List<RecipeCategory>();

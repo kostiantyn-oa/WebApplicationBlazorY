@@ -2,8 +2,10 @@
 @using BlazorApp12.Models
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 @using System.Text.Json
 @using System.Text.Json.Serialization
+@implements IDisposable
 
 <h3>Додати рецепт</h3>
 
@@ -24,7 +26,7 @@
 
     <div class="form-group">
         <label for="instructions">Інструкції</label>
-        <InputTextArea id="instructions" class="form-control" @bind-Value="newRecipe.Instructions" />
+        <textarea id="instructions" class="form-control" @bind-value="newRecipe.Instructions" @bind-value:event="oninput"></textarea>
         <ValidationMessage For="() => newRecipe.Instructions" />
     </div>
 
@@ -53,6 +55,15 @@
     </div>
 
     <div class="form-group">
+        <label for="photo">Фото (необов’язкове)</label>
+        <InputFile id="photo" class="form-control" OnChange="@HandleFileSelection" accept="image/*" />
+        @if (photoError)
+        {
+            <p class="text-danger">Розмір фото не повинен перевищувати 5 МБ.</p>
+        }
+    </div>
+
+    <div class="form-group">
         <label>Інгредієнти</label>
         <table class="table">
             <thead>
@@ -68,7 +79,7 @@
                     <tr>
                         <td>
                             <InputSelect @bind-Value="ingredient.IngredientId" class="form-control">
-                                <option value="0">Виберіть інгредієнт...</option>
+                                <option value="0">Воберіть інгредієнт...</option>
                                 @foreach (var ing in ingredients)
                                 {
                                     <option value="@ing.Id">@ing.Name</option>
@@ -121,6 +132,9 @@
     }
 </EditForm>
 
+<script src="https://cdn.tiny.cloud/1/9xml1azfhv036b308h5p1azopl49j8044p54hk8kmxulvf41/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="tinymce-init.js"></script>
+
 @code {
     private Recipe newRecipe = new Recipe();
     private List<DifficultyLevel> difficultyLevels = new List<DifficultyLevel>();
@@ -131,6 +145,8 @@
     private int[] selectedMealTimeIds = Array.Empty<int>();
     private string errorMessage;
     private bool showIngredientError;
+    private bool photoError;
+    private bool isTinyMCEInitialized;
 
     protected override async Task OnInitializedAsync()
     {
@@ -149,7 +165,6 @@
                 return;
             }
             var difficultyLevelJson = await difficultyLevelResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"DifficultyLevel JSON: {difficultyLevelJson}");
             difficultyLevels = JsonSerializer.Deserialize<List<DifficultyLevel>>(difficultyLevelJson, options) ?? new List<DifficultyLevel>();
 
             var ingredientResponse = await Http.GetAsync("https://localhost:7162/api/Ingredient");
@@ -159,7 +174,6 @@
                 return;
             }
             var ingredientJson = await ingredientResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"Ingredient JSON: {ingredientJson}");
             ingredients = JsonSerializer.Deserialize<List<Ingredient>>(ingredientJson, options) ?? new List<Ingredient>();
 
             var categoryResponse = await Http.GetAsync("https://localhost:7162/api/Category");
@@ -169,7 +183,6 @@
                 return;
             }
             var categoryJson = await categoryResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"Category JSON: {categoryJson}");
             categories = JsonSerializer.Deserialize<List<Category>>(categoryJson, options) ?? new List<Category>();
 
             var mealTimeResponse = await Http.GetAsync("https://localhost:7162/api/MealTime");
@@ -179,7 +192,6 @@
                 return;
             }
             var mealTimeJson = await mealTimeResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"MealTime JSON: {mealTimeJson}");
             mealTimes = JsonSerializer.Deserialize<List<MealTime>>(mealTimeJson, options) ?? new List<MealTime>();
 
             if (!difficultyLevels.Any() || !ingredients.Any() || !categories.Any() || !mealTimes.Any())
@@ -199,6 +211,24 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await Task.Delay(100);
+                await JSRuntime.InvokeVoidAsync("initializeTinyMCE", "#instructions");
+                isTinyMCEInitialized = true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Помилка ініціалізації TinyMCE: {ex.Message}";
+                Console.WriteLine($"TinyMCE Exception: {ex.StackTrace}");
+            }
+        }
+    }
+
     private void AddIngredient()
     {
         newRecipe.RecipeIngredients.Add(new RecipeIngredient());
@@ -209,11 +239,36 @@
         newRecipe.RecipeIngredients.Remove(ingredient);
     }
 
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            if (file.Size > 5 * 1024 * 1024)
+            {
+                photoError = true;
+                newRecipe.Photo = null;
+                return;
+            }
+
+            photoError = false;
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            newRecipe.Photo = memoryStream.ToArray();
+        }
+        else
+        {
+            newRecipe.Photo = null;
+        }
+    }
+
     private async Task HandleAddRecipe()
     {
         try
         {
             showIngredientError = false;
+            photoError = false;
 
             if (!newRecipe.RecipeIngredients.Any() || newRecipe.RecipeIngredients.Any(ri => ri.IngredientId <= 0 || string.IsNullOrWhiteSpace(ri.Quantity)))
             {
@@ -235,9 +290,10 @@
                 newRecipe.Description,
                 newRecipe.Instructions,
                 newRecipe.CookingTime,
-                DifficultyLevelId = newRecipe.DifficultyLevelId,
+                newRecipe.DifficultyLevelId,
                 newRecipe.Calories,
                 CreatedDate = DateTime.UtcNow,
+                Photo = newRecipe.Photo != null ? Convert.ToBase64String(newRecipe.Photo) : null,
                 RecipeIngredients = newRecipe.RecipeIngredients.Select(ri => new
                 {
                     ri.IngredientId,
@@ -271,5 +327,20 @@
     private void Cancel()
     {
         Navigation.NavigateTo("/recipes");
+    }
+
+    public void Dispose()
+    {
+        if (isTinyMCEInitialized)
+        {
+            try
+            {
+                JSRuntime.InvokeVoidAsync("destroyTinyMCE", "#instructions").GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in Dispose: {ex.Message}");
+            }
+        }
     }
 }

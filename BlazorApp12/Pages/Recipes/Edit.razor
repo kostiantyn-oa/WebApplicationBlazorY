@@ -2,8 +2,10 @@
 @using BlazorApp12.Models
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 @using System.Text.Json
 @using System.Text.Json.Serialization
+@implements IDisposable
 
 <h3>Редагувати рецепт</h3>
 
@@ -34,7 +36,7 @@ else
 
         <div class="form-group">
             <label for="instructions">Інструкції</label>
-            <InputTextArea id="instructions" class="form-control" @bind-Value="recipe.Instructions" />
+            <textarea id="instructions" class="form-control" @bind-value="recipe.Instructions" @bind-value:event="oninput"></textarea>
             <ValidationMessage For="() => recipe.Instructions" />
         </div>
 
@@ -60,6 +62,22 @@ else
             <label for="calories">Калорії</label>
             <InputNumber id="calories" class="form-control" @bind-Value="recipe.Calories" />
             <ValidationMessage For="() => recipe.Calories" />
+        </div>
+
+        <div class="form-group">
+            <label for="photo">Фото (необов’язкове)</label>
+            @if (recipe.Photo != null && recipe.Photo.Length > 0)
+            {
+                <div>
+                    <img src="data:image/jpeg;base64,@Convert.ToBase64String(recipe.Photo)" alt="Recipe Photo" style="max-width: 200px; max-height: 200px;" />
+                    <button type="button" class="btn btn-danger btn-sm" @onclick="RemovePhoto">Видалити фото</button>
+                </div>
+            }
+            <InputFile id="photo" class="form-control" OnChange="@HandleFileSelection" accept="image/*" />
+            @if (photoError)
+            {
+                <p class="text-danger">Розмір фото не повинен перевищувати 5 МБ.</p>
+            }
         </div>
 
         <div class="form-group">
@@ -132,6 +150,9 @@ else
     </EditForm>
 }
 
+<script src="https://cdn.tiny.cloud/1/9xml1azfhv036b308h5p1azopl49j8044p54hk8kmxulvf41/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="tinymce-init.js"></script>
+
 @code {
     [Parameter]
     public int Id { get; set; }
@@ -145,6 +166,8 @@ else
     private int[] selectedMealTimeIds = Array.Empty<int>();
     private string errorMessage;
     private bool showIngredientError;
+    private bool photoError;
+    private bool isTinyMCEInitialized;
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,7 +186,6 @@ else
                 return;
             }
             var difficultyLevelJson = await difficultyLevelResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"DifficultyLevel JSON: {difficultyLevelJson}");
             difficultyLevels = JsonSerializer.Deserialize<List<DifficultyLevel>>(difficultyLevelJson, options) ?? new List<DifficultyLevel>();
 
             var ingredientResponse = await Http.GetAsync("https://localhost:7162/api/Ingredient");
@@ -173,7 +195,6 @@ else
                 return;
             }
             var ingredientJson = await ingredientResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"Ingredient JSON: {ingredientJson}");
             ingredients = JsonSerializer.Deserialize<List<Ingredient>>(ingredientJson, options) ?? new List<Ingredient>();
 
             var categoryResponse = await Http.GetAsync("https://localhost:7162/api/Category");
@@ -183,7 +204,6 @@ else
                 return;
             }
             var categoryJson = await categoryResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"Category JSON: {categoryJson}");
             categories = JsonSerializer.Deserialize<List<Category>>(categoryJson, options) ?? new List<Category>();
 
             var mealTimeResponse = await Http.GetAsync("https://localhost:7162/api/MealTime");
@@ -193,7 +213,6 @@ else
                 return;
             }
             var mealTimeJson = await mealTimeResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"MealTime JSON: {mealTimeJson}");
             mealTimes = JsonSerializer.Deserialize<List<MealTime>>(mealTimeJson, options) ?? new List<MealTime>();
 
             var recipeResponse = await Http.GetAsync($"https://localhost:7162/api/Recipe/{Id}");
@@ -203,7 +222,6 @@ else
                 return;
             }
             var recipeJson = await recipeResponse.Content.ReadAsStringAsync();
-            Console.WriteLine($"Recipe JSON: {recipeJson}");
             recipe = JsonSerializer.Deserialize<Recipe>(recipeJson, options);
             if (recipe == null)
             {
@@ -231,6 +249,24 @@ else
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (recipe != null)
+        {
+            try
+            {
+                await Task.Delay(100);
+                await JSRuntime.InvokeVoidAsync("initializeTinyMCE", "#instructions");
+                isTinyMCEInitialized = true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Помилка ініціалізації TinyMCE: {ex.Message}";
+                Console.WriteLine($"TinyMCE Exception: {ex.StackTrace}");
+            }
+        }
+    }
+
     private void AddIngredient()
     {
         recipe.RecipeIngredients.Add(new RecipeIngredient());
@@ -241,11 +277,42 @@ else
         recipe.RecipeIngredients.Remove(ingredient);
     }
 
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            if (file.Size > 5 * 1024 * 1024)
+            {
+                photoError = true;
+                recipe.Photo = null;
+                return;
+            }
+
+            photoError = false;
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            recipe.Photo = memoryStream.ToArray();
+        }
+        else
+        {
+            recipe.Photo = null;
+        }
+    }
+
+    private void RemovePhoto()
+    {
+        recipe.Photo = null;
+        photoError = false;
+    }
+
     private async Task HandleEditRecipe()
     {
         try
         {
             showIngredientError = false;
+            photoError = false;
 
             if (!recipe.RecipeIngredients.Any() || recipe.RecipeIngredients.Any(ri => ri.IngredientId <= 0 || string.IsNullOrWhiteSpace(ri.Quantity)))
             {
@@ -260,27 +327,30 @@ else
                 return;
             }
 
-            recipe.RecipeCategories = selectedCategoryIds
-                .Select(id => new RecipeCategory { CategoryId = id, RecipeId = Id, Recipe = null, Category = null })
-                .ToList();
-
-            recipe.RecipeMealTimes = selectedMealTimeIds
-                .Select(id => new RecipeMealTime { MealTimeId = id, RecipeId = Id, Recipe = null, MealTime = null })
-                .ToList();
-
-            foreach (var ri in recipe.RecipeIngredients)
+            var recipeDto = new
             {
-                ri.RecipeId = Id;
-                ri.Recipe = null;
-                ri.Ingredient = null;
-            }
+                recipe.Id,
+                recipe.Title,
+                recipe.Description,
+                recipe.Instructions,
+                recipe.CookingTime,
+                recipe.DifficultyLevelId,
+                recipe.Calories,
+                recipe.CreatedDate,
+                Photo = recipe.Photo != null ? Convert.ToBase64String(recipe.Photo) : null,
+                RecipeIngredients = recipe.RecipeIngredients.Select(ri => new
+                {
+                    ri.IngredientId,
+                    ri.Quantity
+                }).ToList(),
+                RecipeCategories = selectedCategoryIds.Select(id => new { CategoryId = id }).ToList(),
+                RecipeMealTimes = selectedMealTimeIds.Select(id => new { MealTimeId = id }).ToList()
+            };
 
-            recipe.DifficultyLevel = null;
+            var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+            Console.WriteLine($"Recipe to PUT: {JsonSerializer.Serialize(recipeDto, jsonOptions)}");
 
-            var jsonOptions = new JsonSerializerOptions { ReferenceHandler = ReferenceHandler.Preserve };
-            Console.WriteLine($"Recipe to PUT: {JsonSerializer.Serialize(recipe, jsonOptions)}");
-
-            var response = await Http.PutAsJsonAsync($"https://localhost:7162/api/Recipe/{Id}", recipe);
+            var response = await Http.PutAsJsonAsync($"https://localhost:7162/api/Recipe/{Id}", recipeDto);
             if (response.IsSuccessStatusCode)
             {
                 Navigation.NavigateTo("/recipes");
@@ -301,5 +371,20 @@ else
     private void Cancel()
     {
         Navigation.NavigateTo("/recipes");
+    }
+
+    public void Dispose()
+    {
+        if (isTinyMCEInitialized)
+        {
+            try
+            {
+                JSRuntime.InvokeVoidAsync("destroyTinyMCE", "#instructions").GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in Dispose: {ex.Message}");
+            }
+        }
     }
 }
