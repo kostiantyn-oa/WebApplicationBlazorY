@@ -1,0 +1,227 @@
+﻿@page "/collections/create"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@implements IDisposable
+
+<h3>Додати колекцію</h3>
+
+<EditForm Model="@newCollection" OnValidSubmit="@HandleAddCollection">
+    <DataAnnotationsValidator />
+
+    <div class="form-group">
+        <label for="title">Назва</label>
+        <InputText id="title" class="form-control" @bind-Value="newCollection.Title" />
+        <ValidationMessage For="() => newCollection.Title" />
+    </div>
+
+    <div class="form-group">
+        <label for="description">Опис</label>
+        <textarea id="description" class="form-control" @bind-value="newCollection.Description" @bind-value:event="oninput"></textarea>
+        <ValidationMessage For="() => newCollection.Description" />
+    </div>
+
+    <div class="form-group">
+        <label for="collectionCategoryId">Категорія</label>
+        <InputSelect id="collectionCategoryId" class="form-control" @bind-Value="newCollection.CollectionCategoryId">
+            <option value="0">Виберіть категорію...</option>
+            @foreach (var category in collectionCategories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </InputSelect>
+        <ValidationMessage For="() => newCollection.CollectionCategoryId" />
+    </div>
+
+    <div class="form-group">
+        <label for="photo">Фото (необов’язкове)</label>
+        <InputFile id="photo" class="form-control" OnChange="@HandleFileSelection" accept="image/*" />
+        @if (photoError)
+        {
+            <p class="text-danger">Розмір фото не повинен перевищувати 5 МБ.</p>
+        }
+    </div>
+
+    <div class="form-group">
+        <label>Рецепти</label>
+        <InputSelect id="recipes" class="form-control" multiple @bind-Value="selectedRecipeIds">
+            @foreach (var recipe in recipes)
+            {
+                <option value="@recipe.Id">@recipe.Title</option>
+            }
+        </InputSelect>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Додати колекцію</button>
+    <button class="btn btn-secondary" @onclick="Cancel">Скасувати</button>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="text-danger">@errorMessage</p>
+    }
+</EditForm>
+
+<script src="https://cdn.tiny.cloud/1/9xml1azfhv036b308h5p1azopl49j8044p54hk8kmxulvf41/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="tinymce-init.js"></script>
+
+@code {
+    private Collection newCollection = new Collection();
+    private List<CollectionCategory> collectionCategories = new List<CollectionCategory>();
+    private List<Recipe> recipes = new List<Recipe>();
+    private int[] selectedRecipeIds = Array.Empty<int>();
+    private string errorMessage;
+    private bool photoError;
+    private bool isTinyMCEInitialized;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var categoryResponse = await Http.GetAsync("https://localhost:7162/api/CollectionCategory");
+            if (!categoryResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження категорій: {categoryResponse.ReasonPhrase}";
+                return;
+            }
+            var categoryJson = await categoryResponse.Content.ReadAsStringAsync();
+            collectionCategories = JsonSerializer.Deserialize<List<CollectionCategory>>(categoryJson, options) ?? new List<CollectionCategory>();
+
+            var recipeResponse = await Http.GetAsync("https://localhost:7162/api/Recipe");
+            if (!recipeResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження рецептів: {recipeResponse.ReasonPhrase}";
+                return;
+            }
+            var recipeJson = await recipeResponse.Content.ReadAsStringAsync();
+            recipes = JsonSerializer.Deserialize<List<Recipe>>(recipeJson, options) ?? new List<Recipe>();
+
+            if (!collectionCategories.Any() || !recipes.Any())
+            {
+                errorMessage = "Деякі дані не вдалося завантажити з сервера.";
+            }
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Помилка десеріалізації: {ex.Message}";
+            Console.WriteLine($"JsonException: {ex.StackTrace}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження даних: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await Task.Delay(100);
+                await JSRuntime.InvokeVoidAsync("initializeTinyMCE", "#description");
+                isTinyMCEInitialized = true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Помнлка ініціалізації TinyMCE: {ex.Message}";
+                Console.WriteLine($"TinyMCE Exception: {ex.StackTrace}");
+            }
+        }
+    }
+
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            if (file.Size > 5 * 1024 * 1024)
+            {
+                photoError = true;
+                newCollection.Photo = null;
+                return;
+            }
+
+            photoError = false;
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            newCollection.Photo = memoryStream.ToArray();
+        }
+        else
+        {
+            newCollection.Photo = null;
+        }
+    }
+
+    private async Task HandleAddCollection()
+    {
+        try
+        {
+            photoError = false;
+
+            if (!newCollection.CollectionCategoryId.HasValue || newCollection.CollectionCategoryId <= 0)
+            {
+                errorMessage = "Виберіть валідну категорію.";
+                return;
+            }
+
+            var collectionDto = new
+            {
+                newCollection.Id,
+                newCollection.Title,
+                newCollection.Description,
+                newCollection.CollectionCategoryId,
+                Photo = newCollection.Photo != null ? Convert.ToBase64String(newCollection.Photo) : null,
+                CollectionRecipes = selectedRecipeIds.Select(id => new { RecipeId = id }).ToList()
+            };
+
+            var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+            Console.WriteLine($"Collection to POST: {JsonSerializer.Serialize(collectionDto, jsonOptions)}");
+
+            var response = await Http.PostAsJsonAsync("https://localhost:7162/api/Collection", collectionDto);
+            if (response.IsSuccessStatusCode)
+            {
+                Navigation.NavigateTo("/collections");
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Помилка додавання колекції: {response.ReasonPhrase}. Деталі: {errorContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/collections");
+    }
+
+    public void Dispose()
+    {
+        if (isTinyMCEInitialized)
+        {
+            try
+            {
+                JSRuntime.InvokeVoidAsync("destroyTinyMCE", "#description").GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in Dispose: {ex.Message}");
+            }
+        }
+    }
+}

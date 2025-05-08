@@ -23,6 +23,8 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IDifficultyLevelRepository, DifficultyLevelRepository>();
 builder.Services.AddScoped<IIngredientRepository, IngredientRepository>();
 builder.Services.AddScoped<IMealTimeRepository, MealTimeRepository>();
+builder.Services.AddScoped<ICollectionRepository, CollectionRepository>();
+builder.Services.AddScoped<ICollectionCategoryRepository, CollectionCategoryRepository>();
 
 builder.Services.AddCors(options =>
 {

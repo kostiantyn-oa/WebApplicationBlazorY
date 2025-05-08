@@ -5,96 +5,175 @@
 @using System.Text.Json
 @using System.Text.Json.Serialization
 
-<h3>Деталі рецепту</h3>
+<div class="container my-5">
+    <h2 class="mb-5 font-weight-bold">Деталі рецепту</h2>
 
-@if (recipe == null)
-{
-    <p>Завантаження рецепту...</p>
-}
-else
-{
-    <div class="card">
-        <div class="card-header">
-            <h4>@recipe.Title</h4>
+    @if (recipe == null)
+    {
+        <div class="alert alert-info" role="alert">
+            Завантаження рецепту...
         </div>
-        <div class="card-body">
-            @if (recipe.Photo != null && recipe.Photo.Length > 0)
-            {
-                <h5>Фото</h5>
-                <img src="data:image/jpeg;base64,@Convert.ToBase64String(recipe.Photo)" alt="Recipe Photo" style="max-width: 300px; max-height: 300px;" />
-            }
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3">
+                <h3 class="mb-0">@recipe.Title</h3>
+            </div>
+            <div class="card-body py-5">
+                <div class="row">
+                    <div class="col-lg-6">
+                        @if (recipe.Photo != null && recipe.Photo.Length > 0)
+                        {
+                            <h5 class="font-weight-semibold mb-3">Фото</h5>
+                            <img src="data:image/jpeg;base64,@Convert.ToBase64String(recipe.Photo)"
+                                 alt="Recipe Photo"
+                                 class="img-fluid rounded mb-4"
+                                 style="max-width: 100%; height: auto; max-height: 400px;" />
+                        }
 
-            <h5>Опис</h5>
-            <p>@recipe.Description</p>
+                        <h5 class="font-weight-semibold mb-3">Опис</h5>
+                        <p class="mb-4">@recipe.Description</p>
 
-            <h5>Інструкції</h5>
-            <div>@((MarkupString)recipe.Instructions)</div>
+                        <h5 class="font-weight-semibold mb-3">Інструкції</h5>
+                        <div class="mb-4">@((MarkupString)recipe.Instructions)</div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="mb-4">
+                            <h5 class="font-weight-semibold mb-3">Інформація</h5>
+                            <div class="d-flex flex-wrap gap-2">
+                                <div class="border rounded p-3 flex-fill text-center">
+                                    <strong>Час приготування</strong>
+                                    <p class="mb-0 mt-2">@recipe.CookingTime хвилин</p>
+                                </div>
+                                <div class="border rounded p-3 flex-fill text-center">
+                                    <strong>Рівень складності</strong>
+                                    <p class="mb-0 mt-2">@(recipe.DifficultyLevel?.Name ?? "Немає")</p>
+                                </div>
+                                <div class="border rounded p-3 flex-fill text-center">
+                                    <strong>Калорії</strong>
+                                    <p class="mb-0 mt-2">@recipe.Calories ккал</p>
+                                </div>
+                            </div>
+                        </div>
 
-            <h5>Час приготування</h5>
-            <p>@recipe.CookingTime хвилин</p>
+                        <h5 class="font-weight-semibold mb-3">Інгредієнти</h5>
+                        @if (recipe.RecipeIngredients != null && recipe.RecipeIngredients.Any())
+                        {
+                            <ul class="list-unstyled mb-4">
+                                @foreach (var ingredient in recipe.RecipeIngredients)
+                                {
+                                    <li class="mb-2">
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        @(ingredient.Ingredient?.Name ?? "Невідомий інгредієнт") (@ingredient.Quantity)
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="mb-4">Немає інгредієнтів</p>
+                        }
 
-            <h5>Рівень складності</h5>
-            <p>@(recipe.DifficultyLevel?.Name ?? "Немає")</p>
+                        <h5 class="font-weight-semibold mb-3">Категорії</h5>
+                        @if (recipe.RecipeCategories != null && recipe.RecipeCategories.Any())
+                        {
+                            <div class="d-flex flex-wrap gap-2 mb-4">
+                                @foreach (var category in recipe.RecipeCategories)
+                                {
+                                    <span class="border rounded-pill px-3 py-1">
+                                        @(category.Category?.Name ?? "Невідома категорія")
+                                    </span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="mb-4">Немає категорій</p>
+                        }
 
-            <h5>Калорії</h5>
-            <p>@recipe.Calories ккал</p>
-
-            <h5>Інгредієнти</h5>
-            @if (recipe.RecipeIngredients != null && recipe.RecipeIngredients.Any())
-            {
-                <ul>
-                    @foreach (var ingredient in recipe.RecipeIngredients)
-                    {
-                        <li>@(ingredient.Ingredient?.Name ?? "Невідомий інгредієнт") (@ingredient.Quantity)</li>
-                    }
-                </ul>
-            }
-            else
-            {
-                <p>Немає інгредієнтів</p>
-            }
-
-            <h5>Категорії</h5>
-            @if (recipe.RecipeCategories != null && recipe.RecipeCategories.Any())
-            {
-                <ul>
-                    @foreach (var category in recipe.RecipeCategories)
-                    {
-                        <li>@(category.Category?.Name ?? "Невідома категорія")</li>
-                    }
-                </ul>
-            }
-            else
-            {
-                <p>Немає категорій</p>
-            }
-
-            <h5>Час прийому їжі</h5>
-            @if (recipe.RecipeMealTimes != null && recipe.RecipeMealTimes.Any())
-            {
-                <ul>
-                    @foreach (var mealTime in recipe.RecipeMealTimes)
-                    {
-                        <li>@(mealTime.MealTime?.Name ?? "Невідомий час")</li>
-                    }
-                </ul>
-            }
-            else
-            {
-                <p>Немає часу прийому їжі</p>
-            }
+                        <h5 class="font-weight-semibold mb-3">Час прийому їжі</h5>
+                        @if (recipe.RecipeMealTimes != null && recipe.RecipeMealTimes.Any())
+                        {
+                            <div class="d-flex flex-wrap gap-2 mb-4">
+                                @foreach (var mealTime in recipe.RecipeMealTimes)
+                                {
+                                    <span class="border rounded-pill px-3 py-1">
+                                        @(mealTime.MealTime?.Name ?? "Невідомий час")
+                                    </span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="mb-4">Немає часу прийому їжі</p>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top py-3 d-flex justify-content-between">
+                <a href="/recipes" class="btn btn-outline-dark px-4">Назад до списку</a>
+                <a href="/recipes/edit/@recipe.Id" class="btn btn-primary px-4">Редагувати</a>
+            </div>
         </div>
-        <div class="card-footer">
-            <a href="/recipes" class="btn btn-secondary">Назад до списку</a>
-            <a href="/recipes/edit/@recipe.Id" class="btn btn-primary">Редагувати</a>
-        </div>
-    </div>
-}
+    }
 
-@if (!string.IsNullOrEmpty(errorMessage))
-{
-    <p class="text-danger">@errorMessage</p>
-}
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-4" role="alert">
+            @errorMessage
+        </div>
+    }
+</div>
+
+<style>
+    .card {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .card-header, .card-footer {
+        background-color: #ffffff;
+    }
+
+    .btn {
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+    h5.font-weight-semibold {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .list-unstyled li {
+        display: flex;
+        align-items: center;
+    }
+
+    .bi {
+        color: #555;
+        font-size: 1.1rem;
+    }
+
+    .border.rounded {
+        border-color: #dee2e6;
+    }
+
+    .rounded-pill {
+        border-color: #dee2e6;
+        background-color: #f8f9fa;
+        font-size: 0.9rem;
+    }
+
+    .gap-2 {
+        gap: 0.75rem;
+    }
+</style>
 
 @code {
     [Parameter]

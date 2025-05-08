@@ -1,0 +1,661 @@
+﻿@page "/advanced-collections"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+    }
+
+        .modal-content h4 {
+            margin-top: 0;
+        }
+
+        .modal-content .btn {
+            margin: 5px;
+        }
+
+    .section {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+    }
+
+        .section h4 {
+            margin-top: 0;
+            color: #333;
+        }
+
+    .action-button {
+        width: 100px;
+        text-align: center;
+    }
+
+    .pagination {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+    }
+
+        .pagination .btn-gold {
+            min-width: 40px;
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #333;
+        }
+
+            .pagination .btn-gold:hover {
+                background-color: #e0a800;
+                border-color: #e0a800;
+            }
+
+    .btn-yellow {
+        background-color: #ffc107;
+        border-color: #ffc107;
+        color: #333;
+    }
+
+        .btn-yellow:hover {
+            background-color: #e0a800;
+            border-color: #e0a800;
+        }
+
+    .btn-red {
+        background-color: #dc3545;
+        border-color: #dc3545;
+        color: #fff;
+    }
+
+        .btn-red:hover {
+            background-color: #c82333;
+            border-color: #c82333;
+        }
+
+    .btn-halfwidth {
+        width: 49.5%;
+        margin-right: 1%;
+    }
+
+        .btn-halfwidth:last-child {
+            margin-right: 0;
+        }
+
+    .button-row {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 15px;
+    }
+
+    .description-cell {
+        max-width: 200px;
+        overflow-wrap: break-word;
+        white-space: normal;
+    }
+
+    .btn-fullwidth {
+        width: 100%;
+    }
+
+    .result-title {
+        margin-top: 20px;
+        margin-bottom: 20px;
+        color: #333;
+    }
+
+    .table-fixed {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+        .table-fixed th, .table-fixed td {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+    .col-title {
+        width: 20%;
+    }
+
+    .col-description {
+        width: 30%;
+    }
+
+    .col-category {
+        width: 20%;
+    }
+
+    .col-recipes {
+        width: 15%;
+    }
+
+    .col-actions {
+        width: 15%;
+    }
+
+    .success-message {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background-color: #28a745;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 1100;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .filter-indicator {
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #555;
+    }
+
+    .indicator-active {
+        color: #28a745;
+        font-weight: bold;
+    }
+</style>
+
+<h3>Панель пошуку колекцій</h3>
+
+<div class="section">
+    <h4>Пошук</h4>
+    <div class="row">
+        <div class="col-md-6">
+            <label for="searchTitle">Пошук за назвою</label>
+            <input id="searchTitle" class="form-control" @bind="searchTitle" @bind:event="oninput" placeholder="Введіть назву..." />
+        </div>
+        <div class="col-md-6">
+            <label for="searchDescription">Пошук за описом</label>
+            <input id="searchDescription" class="form-control" @bind="searchDescription" @bind:event="oninput" placeholder="Введіть опис..." />
+        </div>
+    </div>
+    <div class="button-row">
+        <button class="btn btn-yellow btn-halfwidth" @onclick="ApplySearch">Застосувати пошук</button>
+        <button class="btn btn-red btn-halfwidth" @onclick="ClearSearch">Очистити пошук</button>
+    </div>
+    <div class="filter-indicator">
+        Статус: <span class="@(IsSearchActive ? "indicator-active" : "")">@(IsSearchActive ? $"Пошук активний, застосовано: {GetActiveSearchParameters()}" : "Пошук не активний")</span>
+    </div>
+</div>
+
+<div class="section">
+    <h4>Сортування</h4>
+    <div class="row">
+        <div class="col-md-6">
+            <label for="sortOption">Сортування</label>
+            <select id="sortOption" class="form-control" @bind="sortOption">
+                <option value="">Вибрати сортування</option>
+                <option value="TitleAsc">Назва (А-Я)</option>
+                <option value="TitleDesc">Назва (Я-А)</option>
+                <option value="RecipesCountAsc">Кількість рецептів (зростання)</option>
+                <option value="RecipesCountDesc">Кількість рецептів (спадання)</option>
+            </select>
+        </div>
+    </div>
+    <div class="button-row">
+        <button class="btn btn-yellow btn-halfwidth" @onclick="ApplySorting">Застосувати сортування</button>
+        <button class="btn btn-red btn-halfwidth" @onclick="ClearSorting">Відмінити сортування</button>
+    </div>
+    <div class="filter-indicator">
+        Статус: <span class="@(IsSortActive ? "indicator-active" : "")">@(IsSortActive ? $"Сортування активне, застосовано: {GetActiveSortParameter()}" : "Сортування не активне")</span>
+    </div>
+</div>
+
+<div class="section">
+    <h4>Фільтрація</h4>
+    <div class="row">
+        <div class="col-md-6">
+            <label for="categoryFilter">Категорії</label>
+            <select id="categoryFilter" class="form-control" multiple @bind="selectedCategoryIds">
+                @foreach (var category in collectionCategories)
+                {
+                    <option value="@category.Id">@category.Name</option>
+                }
+            </select>
+        </div>
+    </div>
+    <div class="button-row">
+        <button class="btn btn-yellow btn-halfwidth" @onclick="ApplyFilters">Застосувати фільтрацію</button>
+        <button class="btn btn-red btn-halfwidth" @onclick="ClearFilters">Видалити фільтрацію</button>
+    </div>
+    <div class="filter-indicator">
+        Статус: <span class="@(IsFilterActive ? "indicator-active" : "")">@(IsFilterActive ? $"Фільтрація активна, застосовано: {GetActiveFilterParameters()}" : "Фільтрація не активна")</span>
+    </div>
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-red btn-fullwidth" @onclick="ClearAll">Очистити все</button>
+</div>
+<hr />
+<div class="mb-3">
+    <a href="/collections/create" class="btn btn-success btn-fullwidth">Додати колекцію</a>
+</div>
+<h4 class="result-title">Результат пошуку</h4>
+
+@if (filteredCollections == null)
+{
+    <p>Завантаження колекцій...</p>
+}
+else if (!filteredCollections.Any())
+{
+    <p>Колекцій не знайдено.</p>
+}
+else
+{
+    <table class="table table-striped table-fixed">
+        <thead>
+            <tr>
+                <th class="col-title">Назва</th>
+                <th class="col-description">Опис</th>
+                <th class="col-category">Категорія</th>
+                <th class="col-recipes">Кількість рецептів</th>
+                <th class="col-actions">Дії</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var collection in pagedCollections)
+            {
+                <tr>
+                    <td class="col-title">@collection.Title</td>
+                    <td class="col-description description-cell">@((MarkupString)(collection.Description ?? ""))</td>
+                    <td class="col-category">@(collection.CollectionCategory?.Name ?? "Немає")</td>
+                    <td class="col-recipes">@(collection.CollectionRecipes?.Count ?? 0)</td>
+                    <td class="col-actions">
+                        <a href="/collections/details/@collection.Id" class="btn btn-info btn-sm action-button">Деталі</a>
+                        <a href="/collections/edit/@collection.Id" class="btn btn-primary btn-sm action-button">Редагувати</a>
+                        <button class="btn btn-danger btn-sm action-button" @onclick="() => ShowDeleteConfirmation(collection.Id)">Видалити</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <button class="btn btn-gold" disabled="@(currentPage == 1)" @onclick="PreviousPage">Попередня</button>
+        <span>Сторінка @currentPage з @totalPages</span>
+        <button class="btn btn-gold" disabled="@(currentPage == totalPages)" @onclick="NextPage">Наступна</button>
+    </div>
+}
+
+@if (showDeleteConfirmation)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <h4>Підтвердження видалення</h4>
+            <p>Ви впевнені, що хочете видалити колекцію?</p>
+            <button class="btn btn-danger" @onclick="ConfirmDelete">Видалити</button>
+            <button class="btn btn-secondary" @onclick="CancelDelete">Скасувати</button>
+        </div>
+    </div>
+}
+
+@if (showSuccessMessage)
+{
+    <div class="success-message">
+        Колекцію успішно видалено!
+    </div>
+}
+
+@if (showSearchError)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <h4>Помилка пошуку</h4>
+            <p>Жодне поле пошуку не заповнене.</p>
+            <button class="btn btn-secondary" @onclick="CloseSearchError">Закрити</button>
+        </div>
+    </div>
+}
+
+@if (showSortError)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <h4>Помилка сортування</h4>
+            <p>Сортування не вибране.</p>
+            <button class="btn btn-secondary" @onclick="CloseSortError">Закрити</button>
+        </div>
+    </div>
+}
+
+@if (showFilterError)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <h4>Помилка фільтрації</h4>
+            <p>Жоден фільтр не вибраний.</p>
+            <button class="btn btn-secondary" @onclick="CloseFilterError">Закрити</button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p class="text-danger">@errorMessage</p>
+}
+
+@code {
+    private List<Collection> collections;
+    private List<Collection> filteredCollections;
+    private List<Collection> pagedCollections;
+    private List<CollectionCategory> collectionCategories = new List<CollectionCategory>();
+    private string searchTitle = "";
+    private string searchDescription = "";
+    private string sortOption = "";
+    private int[] selectedCategoryIds = Array.Empty<int>();
+    private string appliedSearchTitle = "";
+    private string appliedSearchDescription = "";
+    private string appliedSortOption = "";
+    private int[] appliedCategoryIds = Array.Empty<int>();
+    private string errorMessage;
+    private bool showDeleteConfirmation;
+    private bool showSuccessMessage;
+    private bool showSearchError;
+    private bool showSortError;
+    private bool showFilterError;
+    private int collectionIdToDelete;
+    private int currentPage = 1;
+    private int pageSize = 10;
+    private int totalPages => (int)Math.Ceiling((double)(filteredCollections?.Count ?? 0) / pageSize);
+
+    private bool IsSearchActive => !string.IsNullOrWhiteSpace(appliedSearchTitle) || !string.IsNullOrWhiteSpace(appliedSearchDescription);
+    private bool IsSortActive => !string.IsNullOrEmpty(appliedSortOption);
+    private bool IsFilterActive => appliedCategoryIds.Any();
+
+    private string GetActiveSearchParameters()
+    {
+        var parameters = new List<string>();
+        if (!string.IsNullOrWhiteSpace(appliedSearchTitle)) parameters.Add("Пошук за назвою");
+        if (!string.IsNullOrWhiteSpace(appliedSearchDescription)) parameters.Add("Пошук за описом");
+        return string.Join(", ", parameters);
+    }
+
+    private string GetActiveSortParameter()
+    {
+        return appliedSortOption switch
+        {
+            "TitleAsc" => "Назва (А-Я)",
+            "TitleDesc" => "Назва (Я-А)",
+            "RecipesCountAsc" => "Кількість рецептів (зростання)",
+            "RecipesCountDesc" => "Кількість рецептів (спадання)",
+            _ => "Невідоме сортування"
+        };
+    }
+
+    private string GetActiveFilterParameters()
+    {
+        if (appliedCategoryIds.Any())
+        {
+            var names = collectionCategories
+                .Where(c => appliedCategoryIds.Contains(c.Id))
+                .Select(c => c.Name)
+                .ToList();
+            return $"Категорії: {string.Join(", ", names)}";
+        }
+        return "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var collectionResponse = await Http.GetAsync("https://localhost:7162/api/Collection");
+            if (!collectionResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження колекцій: {collectionResponse.ReasonPhrase}";
+                return;
+            }
+            var collectionJson = await collectionResponse.Content.ReadAsStringAsync();
+            collections = JsonSerializer.Deserialize<List<Collection>>(collectionJson, options) ?? new List<Collection>();
+
+            var categoryResponse = await Http.GetAsync("https://localhost:7162/api/CollectionCategory");
+            if (!categoryResponse.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження категорій: {categoryResponse.ReasonPhrase}";
+                return;
+            }
+            var categoryJson = await categoryResponse.Content.ReadAsStringAsync();
+            collectionCategories = JsonSerializer.Deserialize<List<CollectionCategory>>(categoryJson, options) ?? new List<CollectionCategory>();
+
+            ApplyAll();
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Помилка десеріалізації: {ex.Message}";
+            Console.WriteLine($"JsonException: {ex.StackTrace}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження даних: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+
+    private void ApplyAll()
+    {
+        filteredCollections = collections;
+
+        // Apply search
+        if (!string.IsNullOrWhiteSpace(appliedSearchTitle))
+        {
+            filteredCollections = filteredCollections
+                .Where(c => c.Title != null && c.Title.Contains(appliedSearchTitle, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        if (!string.IsNullOrWhiteSpace(appliedSearchDescription))
+        {
+            filteredCollections = filteredCollections
+                .Where(c => c.Description != null && c.Description.Contains(appliedSearchDescription, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        // Apply filters
+        if (appliedCategoryIds.Any())
+        {
+            filteredCollections = filteredCollections
+                .Where(c => c.CollectionCategoryId.HasValue && appliedCategoryIds.Contains(c.CollectionCategoryId.Value))
+                .ToList();
+        }
+
+        // Apply sorting
+        filteredCollections = appliedSortOption switch
+        {
+            "TitleAsc" => filteredCollections.OrderBy(c => c.Title).ToList(),
+            "TitleDesc" => filteredCollections.OrderByDescending(c => c.Title).ToList(),
+            "RecipesCountAsc" => filteredCollections.OrderBy(c => c.CollectionRecipes?.Count ?? 0).ToList(),
+            "RecipesCountDesc" => filteredCollections.OrderByDescending(c => c.CollectionRecipes?.Count ?? 0).ToList(),
+            _ => filteredCollections
+        };
+
+        // Reset to first page
+        currentPage = 1;
+        UpdatePagedCollections();
+    }
+
+    private void UpdatePagedCollections()
+    {
+        pagedCollections = filteredCollections
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+    }
+
+    private async Task ApplySearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchTitle) && string.IsNullOrWhiteSpace(searchDescription))
+        {
+            showSearchError = true;
+            return;
+        }
+
+        appliedSearchTitle = searchTitle;
+        appliedSearchDescription = searchDescription;
+        await LoadData();
+    }
+
+    private async Task ClearSearch()
+    {
+        searchTitle = "";
+        searchDescription = "";
+        appliedSearchTitle = "";
+        appliedSearchDescription = "";
+        await LoadData();
+    }
+
+    private async Task ApplySorting()
+    {
+        if (string.IsNullOrWhiteSpace(sortOption))
+        {
+            showSortError = true;
+            return;
+        }
+
+        appliedSortOption = sortOption;
+        await LoadData();
+    }
+
+    private async Task ClearSorting()
+    {
+        sortOption = "";
+        appliedSortOption = "";
+        await LoadData();
+    }
+
+    private async Task ApplyFilters()
+    {
+        if (!selectedCategoryIds.Any())
+        {
+            showFilterError = true;
+            return;
+        }
+
+        appliedCategoryIds = selectedCategoryIds;
+        await LoadData();
+    }
+
+    private async Task ClearFilters()
+    {
+        selectedCategoryIds = Array.Empty<int>();
+        appliedCategoryIds = Array.Empty<int>();
+        await LoadData();
+    }
+
+    private async Task ClearAll()
+    {
+        searchTitle = "";
+        searchDescription = "";
+        appliedSearchTitle = "";
+        appliedSearchDescription = "";
+        sortOption = "";
+        appliedSortOption = "";
+        selectedCategoryIds = Array.Empty<int>();
+        appliedCategoryIds = Array.Empty<int>();
+        await LoadData();
+    }
+
+    private void PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            UpdatePagedCollections();
+        }
+    }
+
+    private void NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            UpdatePagedCollections();
+        }
+    }
+
+    private void ShowDeleteConfirmation(int id)
+    {
+        collectionIdToDelete = id;
+        showDeleteConfirmation = true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"https://localhost:7162/api/Collection/{collectionIdToDelete}");
+            if (response.IsSuccessStatusCode)
+            {
+                collections.RemoveAll(c => c.Id == collectionIdToDelete);
+                showDeleteConfirmation = false;
+                showSuccessMessage = true;
+                await Task.Delay(2000);
+                showSuccessMessage = false;
+                await LoadData();
+            }
+            else
+            {
+                errorMessage = $"Помилка видалення колекції: {response.ReasonPhrase}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка: {ex.Message}";
+        }
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirmation = false;
+    }
+
+    private void CloseSearchError()
+    {
+        showSearchError = false;
+    }
+
+    private void CloseSortError()
+    {
+        showSortError = false;
+    }
+
+    private void CloseFilterError()
+    {
+        showFilterError = false;
+    }
+}

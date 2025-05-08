@@ -17,9 +17,14 @@ namespace WebApplicationW.Services
         public DbSet<RecipeCategory> RecipeCategory { get; set; }
         public DbSet<MealTime> MealTime { get; set; }
         public DbSet<RecipeMealTime> RecipeMealTime { get; set; }
+        public DbSet<Collection> Collection { get; set; }
+        public DbSet<CollectionCategory> CollectionCategory { get; set; }
+        public DbSet<CollectionRecipe> CollectionRecipe { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            // Existing configurations...
+
             modelBuilder.Entity<RecipeIngredient>()
                 .HasKey(ri => new { ri.RecipeId, ri.IngredientId });
 
@@ -71,7 +76,27 @@ namespace WebApplicationW.Services
                 .HasForeignKey(r => r.DifficultyLevelId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Немає потреби в додатковій конфігурації для Photo, оскільки byte[] мапиться на VARBINARY(MAX)
+            // New configurations for Collections
+            modelBuilder.Entity<Collection>()
+                .HasOne(c => c.CollectionCategory)
+                .WithMany()
+                .HasForeignKey(c => c.CollectionCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<CollectionRecipe>()
+                .HasKey(cr => new { cr.CollectionId, cr.RecipeId });
+
+            modelBuilder.Entity<CollectionRecipe>()
+                .HasOne(cr => cr.Collection)
+                .WithMany(c => c.CollectionRecipes)
+                .HasForeignKey(cr => cr.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<CollectionRecipe>()
+                .HasOne(cr => cr.Recipe)
+                .WithMany()
+                .HasForeignKey(cr => cr.RecipeId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

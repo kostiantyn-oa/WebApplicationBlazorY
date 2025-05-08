@@ -1,0 +1,169 @@
+﻿@page "/collections"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding-top: 10%;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+    }
+
+        .modal-content h4 {
+            margin-top: 0;
+        }
+
+        .modal-content .btn {
+            margin: 5px;
+        }
+</style>
+
+<h3>Колекції</h3>
+
+@if (collections == null)
+{
+    <p>Завантаження колекцій...</p>
+}
+else if (!collections.Any())
+{
+    <p>Колекцій не знайдено.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Назва</th>
+                <th>Опис</th>
+                <th>Категорія</th>
+                <th>Дії</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var collection in collections)
+            {
+                <tr>
+                    <td>@collection.Title</td>
+                    <td>@((MarkupString)(collection.Description ?? ""))</td>
+                    <td>@(collection.CollectionCategory?.Name ?? "Немає")</td>
+                    <td>
+                        <a href="/collections/details/@collection.Id" class="btn btn-info btn-sm">Деталі</a>
+                        <a href="/collections/edit/@collection.Id" class="btn btn-primary btn-sm">Редагувати</a>
+                        <button class="btn btn-danger btn-sm" @onclick="() => ShowDeleteConfirmation(collection.Id)">Видалити</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<a href="/collections/create" class="btn btn-success">Додати колекцію</a>
+
+@if (showDeleteConfirmation)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <h4>Підтвердження видалення</h4>
+            <p>Ви впевнені, що хочете видалити колекцію?</p>
+            <button class="btn btn-danger" @onclick="ConfirmDelete">Видалити</button>
+            <button class="btn btn-secondary" @onclick="CancelDelete">Скасувати</button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p class="text-danger">@errorMessage</p>
+}
+
+@code {
+    private List<Collection> collections;
+    private string errorMessage;
+    private bool showDeleteConfirmation;
+    private int collectionIdToDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var response = await Http.GetAsync("https://localhost:7162/api/Collection");
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження колекцій: {response.ReasonPhrase}";
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            collections = JsonSerializer.Deserialize<List<Collection>>(json, options) ?? new List<Collection>();
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Помилка десеріалізації: {ex.Message}";
+            Console.WriteLine($"JsonException: {ex.StackTrace}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження даних: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+
+    private void ShowDeleteConfirmation(int id)
+    {
+        collectionIdToDelete = id;
+        showDeleteConfirmation = true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"https://localhost:7162/api/Collection/{collectionIdToDelete}");
+            if (response.IsSuccessStatusCode)
+            {
+                collections.RemoveAll(c => c.Id == collectionIdToDelete);
+                showDeleteConfirmation = false;
+            }
+            else
+            {
+                errorMessage = $"Помилка видалення колекції: {response.ReasonPhrase}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка: {ex.Message}";
+        }
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirmation = false;
+    }
+}

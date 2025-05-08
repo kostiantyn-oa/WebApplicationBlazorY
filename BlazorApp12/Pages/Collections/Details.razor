@@ -1,0 +1,178 @@
+﻿@page "/collections/details/{id:int}"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<div class="container my-5">
+    <h2 class="mb-5 font-weight-bold">Деталі колекції</h2>
+
+    @if (collection == null)
+    {
+        <div class="alert alert-info" role="alert">
+            Завантаження колекції...
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3">
+                <h3 class="mb-0">@collection.Title</h3>
+            </div>
+            <div class="card-body py-5">
+                <div class="row">
+                    <div class="col-lg-6">
+                        @if (collection.Photo != null && collection.Photo.Length > 0)
+                        {
+                            <h5 class="font-weight-semibold mb-3">Фото</h5>
+                            <img src="data:image/jpeg;base64,@Convert.ToBase64String(collection.Photo)"
+                                 alt="Collection Photo"
+                                 class="img-fluid rounded mb-4"
+                                 style="max-width: 100%; height: auto; max-height: 400px;" />
+                        }
+
+                        <h5 class="font-weight-semibold mb-3">Опис</h5>
+                        <div class="mb-4">@((MarkupString)collection.Description)</div>
+
+                        <h5 class="font-weight-semibold mb-3">Категорія</h5>
+                        <div class="border rounded p-3 text-center mb-4">
+                            <p class="mb-0">@(collection.CollectionCategory?.Name ?? "Немає")</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="font-weight-semibold">Рецепти</h5>
+                            <span class="badge bg-primary rounded-pill">
+                                @(collection.CollectionRecipes?.Count ?? 0)
+                            </span>
+                        </div>
+                        @if (collection.CollectionRecipes != null && collection.CollectionRecipes.Any())
+                        {
+                            <div class="d-flex flex-column gap-2">
+                                @foreach (var collectionRecipe in collection.CollectionRecipes)
+                                {
+                                    <a href="/recipes/details/@collectionRecipe.RecipeId"
+                                       class="btn btn-outline-dark text-start w-100">
+                                        @(collectionRecipe.Recipe?.Title ?? "Невідомий рецепт")
+                                    </a>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="mb-4">Немає рецептів</p>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white border-top py-3 d-flex justify-content-between">
+                <a href="/collections" class="btn btn-outline-dark px-4">Назад до списку</a>
+                <a href="/collections/edit/@collection.Id" class="btn btn-primary px-4">Редагувати</a>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-4" role="alert">
+            @errorMessage
+        </div>
+    }
+</div>
+
+<style>
+    .card {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .card-header, .card-footer {
+        background-color: #ffffff;
+    }
+
+    .btn {
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+    h5.font-weight-semibold {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .border.rounded {
+        border-color: #dee2e6;
+    }
+
+    .btn-outline-dark {
+        border-color: #dee2e6;
+        color: #333;
+        text-align: left;
+        padding: 10px 15px;
+    }
+
+        .btn-outline-dark:hover {
+            background-color: #f8f9fa;
+            color: #007bff;
+        }
+
+    .badge {
+        font-size: 1rem;
+        padding: 0.5em 1em;
+    }
+
+    .gap-2 {
+        gap: 0.5rem;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Collection collection;
+    private string errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = ReferenceHandler.Preserve,
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var response = await Http.GetAsync($"https://localhost:7162/api/Collection/{Id}");
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"Помилка завантаження колекції: {response.ReasonPhrase}";
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Collection JSON: {json}");
+            collection = JsonSerializer.Deserialize<Collection>(json, options);
+
+            if (collection == null)
+            {
+                errorMessage = "Колекцію не знайдено.";
+            }
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Помилка десеріалізації: {ex.Message}";
+            Console.WriteLine($"JsonException: {ex.StackTrace}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження даних: {ex.Message}";
+            Console.WriteLine($"Exception: {ex.StackTrace}");
+        }
+    }
+}

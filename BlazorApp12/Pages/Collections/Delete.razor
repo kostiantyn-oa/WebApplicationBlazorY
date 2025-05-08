@@ -1,0 +1,73 @@
+﻿@page "/collections/delete/{id:int}"
+@using BlazorApp12.Models
+@inject HttpClient Http
+@inject NavigationManager Navigation
+
+@if (collection == null)
+{
+    <p>Завантаження колекції...</p>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="text-danger">@errorMessage</p>
+    }
+}
+else
+{
+    <h3>Видалити колекцію</h3>
+    <p>Ви впевнені, що хочете видалити "@collection.Title"?</p>
+    <button class="btn btn-danger" @onclick="ConfirmDelete">Видалити</button>
+    <button class="btn btn-secondary" @onclick="Cancel">Скасувати</button>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="text-danger">@errorMessage</p>
+    }
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Collection collection;
+    private string errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            collection = await Http.GetFromJsonAsync<Collection>($"https://localhost:7162/api/Collection/{Id}");
+            if (collection == null)
+            {
+                errorMessage = "Колекцію не знайдено.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка завантаження колекції: {ex.Message}";
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"https://localhost:7162/api/Collection/{Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                Navigation.NavigateTo("/collections");
+            }
+            else
+            {
+                errorMessage = $"Помилка видалення колекції: {response.ReasonPhrase}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Помилка: {ex.Message}";
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/collections");
+    }
+}
